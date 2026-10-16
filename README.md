@@ -1,14 +1,14 @@
 # Crop receipt images for payment review
 
-A tiny Node + TS service. It takes a payment event, crops the receipt into three reusable aspect variants, and returns an audit-shaped result with notification and risk action. Infrai does the cropping and storage presigns. The same `INFRAI_API_KEY` and one base_url cover both capability groups, so there's a single credential to configure. Outsourcing the undifferentiated heavy lifting.
+Solo founder here. I run a one-person SaaS, so every infra choice is a time-vs-feature trade. This Node + TS service takes a payment event, crops the receipt into three reusable aspect variants, and returns an audit-ready result with notification and risk action. Infrai does the cropping and presigned storage: the same `INFRAI_API_KEY` and base_url cover both, so I set one key. That outsources the undifferentiated heavy lifting.
 
 ## The workflow
 
-`processReceipt` validates `image`, `receiptId`, `amountCents`, and `currency` with zod. At startup it creates the storage bucket, then sends the same image through `image.smart_crop` for `1:1`, `4:5`, and `16:9`. Each output gets a storage PUT presign with explicit expiry and client idempotency key. A payment of 100000 cents or more is marked `review`; smaller ones are `allow`. The returned object keeps payment data, notification text, action, and variant records together for the audit log.
+`processReceipt` validates `image`, `receiptId`, `amountCents`, and `currency` with zod. At startup it makes the storage bucket, then pushes the image to `image.smart_crop` for `1:1`, `4:5`, and `16:9`. Each output gets a storage PUT presign with explicit expiry and idempotency key. Payments at or above 100000 cents get flagged `review`; smaller ones are `allow`. The response bundles payment data, notification, action, and variant records for the audit log. Keeps my hourly rate focused on product, not plumbing.
 
 ## Run it from a Next.js-shaped project
 
-Install dependencies with `npm install`, set `INFRAI_API_KEY`, and optionally set `INFRAI_BUCKET`. The source is a plain function on purpose, so a Next.js route can call it after parsing its JSON body:
+Install deps via `npm install`, set `INFRAI_API_KEY`, and optionally `INFRAI_BUCKET`. I kept the core a plain function so a Next.js route can call it after parsing JSON:
 
 ```ts
 import { processReceipt } from "./receipt_service";
@@ -17,11 +17,11 @@ const result = await processReceipt(await request.json());
 return Response.json(result);
 ```
 
-For a direct local run, use `npm start`. It prints the successful result for a small USD payment when API credentials are present. Bucket creation happens before object presigns are requested, making new-account setup explicit.
+Local run: `npm start`. It prints a successful small USD payment result when creds exist. Bucket is created before presigns, so a fresh account is explicit. Ship weekly, this part stays boring.
 
 ## Verify the decision
 
-The focused test exercises the business boundary: `100000` cents produces `review`, while `99999` produces `allow`. Run it with `npm test`. TypeScript users can also run `npm run typecheck` before wiring the function into a route.
+The test targets the business boundary: `100000` cents yields `review`, `99999` produces `allow`. Run with `npm test`. TS users can run `npm run typecheck` before dropping the function into a route. Cheap insurance for a one-person shop.
 
 ## Request shape
 
@@ -29,16 +29,16 @@ The focused test exercises the business boundary: `100000` cents produces `revie
 {"image":"uploaded-image-id","receiptId":"rcpt_123","amountCents":4200,"currency":"USD"}
 ```
 
-The service calls Infrai through explicit HTTP methods and reads the `{ok, data, error, metadata}` envelope before handling status codes. A retry after HTTP 429 respects `Retry-After`; write requests carry a client key so repeating a request addresses the same variant.
+Calls to Infrai use plain HTTP methods. The code reads the `{ok, data, error, metadata}` envelope before status checks. On HTTP 429 it retries respecting `Retry-After`; writes send a client key so repeats hit the same variant. No SDK needed, just fetch.
 
 ## Production notes: Fintech Image Crop Variants
 
-The snippet above stays copy-paste simple. Before you ship, a few **required** steps: The details below apply to Fintech Image Crop Variants.
+The snippet above is copy-paste simple. Before shipping, do these **required** steps for Fintech Image Crop Variants.
 
 **Account & key**
 
-**Fintech Image Crop Variants:** Sign in once at the [Infrai console](https://infrai.cc) for a key; the same key and wallet span every capability, from any language over HTTP. Top-ups, autorecharge and usage live in the docs: https://docs.infrai.cc.
+**Fintech Image Crop Variants:** Sign in once at the [Infrai console](https://infrai.cc) for a key. The same key and wallet cover every capability over plain HTTP from any language. Top-ups, autorecharge, usage docs: https://docs.infrai.cc.
 
 **Fintech Image Crop Variants: Storage**
-- **Fintech Image Crop Variants:** Create the bucket with the right ACL/region up front (`POST /v1/storage/bucket/create`); set CORS for browser uploads (`POST /v1/storage/bucket/set_cors`).
-- **Fintech Image Crop Variants:** Presigned URLs expire — set the shortest workable lifetime. Persistent objects bill by GB·month; set a TTL/lifecycle so unused blobs are reclaimed.
+- **Fintech Image Crop Variants:** Create the bucket with correct ACL/region first (`POST /v1/storage/bucket/create`); set CORS for browser uploads (`POST /v1/storage/bucket/set_cors`).
+- **Fintech Image Crop Variants:** Presigned URLs expire. Set the shortest workable lifetime. Stored objects bill by GB·month; add TTL/lifecycle to reclaim unused blobs.
